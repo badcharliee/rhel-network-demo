@@ -15,6 +15,11 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: 10.0.0.0/28
+        # Allow SSH from own private subnet
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.128/28
         # Allow HTTP from Firewall subnet
         - IpProtocol: tcp
           FromPort: 80
@@ -56,18 +61,34 @@ Resources:
           dnf install -y cockpit
           dnf install -y cockpit-pcp
           dnf install -y httpd
+          dnf install -y rsync
           dnf install -y scap-security-guide lynx
 
           systemctl enable --now cockpit.socket
           systemctl enable --now pmlogger.service
           systemctl enable --now httpd.service
 
+          cat <<EOF > /var/www/html/index.html
+          <html>
+            <title>SecuredByCharles</title>
+            <body>
+              <p>Look under the hood!</p>
+              <a href="https://github.com/badcharliee/rhel-network-demo">Github</a>
+            </body>
+          </html>
+          EOF
+
+          systemctl restart httpd
+
+          CRON_JOB="0 2 * * * rsync --progress -avz -e 'ssh -i /home/ec2-user/.ssh/rhel9-playground-key-pair.pem' /var/www/html/ ec2-user@10.0.0.139:/home/ec2-user/backup/"
+          (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
+
           # Evaluate CIS Benchmarks Level 1 and Generate Report
           oscap xccdf eval --profile xccdf_org.ssgproject.content_profile_cis_server_l1 --results ~/OpenScap_results_file.xml /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
           oscap xccdf generate report --output ~/OpenScap_report_file.html ~/OpenScap_results_file.xml
 
   # Backup Webserver EC2 instance
-  WebServerInstance:
+  WebServerBackupInstance:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: t2.micro
@@ -81,13 +102,14 @@ Resources:
             - !Ref WebServerInstanceSecurityGroup
       Tags:
         - Key: Name
-          Value: rhel-webserver
+          Value: rhel-webserver-backup
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
           dnf install -y cockpit
           dnf install -y cockpit-pcp
           dnf install -y httpd
+          dnf install -y rsync
           dnf install -y scap-security-guide lynx
 
           systemctl enable --now cockpit.socket

@@ -25,6 +25,12 @@ Host webserver
  IdentityFile ~/.ssh/rhel9-playground-key-pair.pem
  User ec2-user
 
+Host webserver-backup
+ StrictHostKeyChecking no
+ HostName <private-webserver-backup-ip>
+ IdentityFile ~/.ssh/rhel9-playground-key-pair.pem
+ User ec2-user
+
 Host firewall
  StrictHostKeyChecking no
  HostName <private-firewall-ip>
@@ -40,6 +46,10 @@ scp -i ./rhel9-playground-key-pair.pem ./config ec2-user@<public-bastion-ip>:/ho
 # ssh into bastion server
 ssh bastion
 chmod 600 ~/.ssh/config # Make ssh config file readable, writable by owner (ec2-user)
+
+# move key webserver needs to rsync with backup server
+scp -i ~/.ssh/rhel9-playground-key-pair.pem ~/.ssh/rhel9-playground-key-pair.pem ec2-user@<private-webserver-ip>:/home/ec2-user/.ssh/
+scp -i ~/.ssh/rhel9-playground-key-pair.pem ~/.ssh/config ec2-user@<private-webserver-ip>:/home/ec2-user/.ssh/
 
 
 
