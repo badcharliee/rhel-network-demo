@@ -1,0 +1,60 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template to create an EC2 instance named 'rhel-nat-gateway' with source/destination check disabled.
+
+Resources:
+  # Security Group for the EC2 instance
+  NATInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for rhel-nat-gateway
+      VpcId: 'vpc-0a291b0d61d8a0bce'
+      PrivateIpAddress: 10.0.0.11
+      SecurityGroupIngress:
+        # Allow SSH from Bastion Host
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/28
+        # Allow all traffic from 10.0.0.128/28 (where private servers needing NAT live)
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.128/28
+        # Allow traffic to port 9090 from Bastion Host
+        - IpProtocol: tcp
+          FromPort: 9090
+          ToPort: 9090
+          CidrIp: 10.0.0.0/28
+      Tags:
+        - Key: Name
+          Value: rhel-nat-gateway-sg
+
+  # EC2 instance
+  NATGatewayInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0583d8c7a9c35822c
+      KeyName: rhel9-playground-key-pair
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: 'subnet-017d1fdfaa7cdb2f0'
+          GroupSet:
+            - !Ref NATInstanceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: rhel-nat-gateway
+      SourceDestCheck: false # This allows traffic to flow back and forth through the NAT Gateway
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y vim
+          dnf install -y cockpit
+          dnf install -y firewalld
+
+          systemctl enable --now firewalld
+          systemctl enable --now cockpit.socket
+
+          firewall-cmd --permanent --zone=public --add-masquerade # Enabling server as NAT Gateway
+          firewall-cmd --reload

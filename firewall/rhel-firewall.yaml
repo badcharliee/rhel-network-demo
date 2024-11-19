@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template to create an EC2 instance named 'rhel-firewall' with source/destination check disabled.
+
+Resources:
+  # Security Group for the EC2 instance
+  FirewallInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for rhel-firewall
+      VpcId: 'vpc-0a291b0d61d8a0bce' # Known, previously built VPC
+      PrivateIpAddress: 10.0.0.8
+      SecurityGroupIngress:
+        # Allow SSH from Private Subnet (where bastion host lives)
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/28
+        # Allow all HTTPS traffic from world
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        # Allow all HTTP traffic from world
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        # Allow traffic to port 9090 from 10.0.0.0/24 (so bastion host can access Cockpit)
+        - IpProtocol: tcp
+          FromPort: 9090
+          ToPort: 9090
+          CidrIp: 10.0.0.0/28
+      Tags:
+        - Key: Name
+          Value: rhel-firewall-sg
+
+  # EC2 instance
+  NATGatewayInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0583d8c7a9c35822c
+      KeyName: rhel9-playground-key-pair
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: 'subnet-017d1fdfaa7cdb2f0' # Known, previously built public subnet in VPC (!Ref VpcId)
+          GroupSet:
+            - !Ref FirewallInstanceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: rhel-firewall
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y vim
+          dnf install -y cockpit
+          dnf install -y firewalld
+
+          systemctl enable --now firewalld
+          systemctl enable --now cockpit.socket
+
+          firewall-cmd --permanent --zone=public --add-masquerade
+          # WARNING: Make sure these port forwarding rules are forwarding to the actual IP of the webserver!
+          firewall-cmd --permanent --add-forward-port=port=80:proto=tcp:toaddr=<private-webserver-ip>:toport=80
+          firewall-cmd --permanent --add-forward-port=port=443:proto=tcp:toaddr=<private-webserver-ip>:toport=443
+          firewall-cmd --reload
+
+  # Elastic IP Association Resource
+  EIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref NATGatewayInstance
+      EIP: 'eipalloc-0971fc78fcf14889f'

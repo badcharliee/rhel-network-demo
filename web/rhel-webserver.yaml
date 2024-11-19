@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template to create an EC2 instance named 'rhel-webserver' in private subnet.
+
+Resources:
+  # Security Group for the EC2 instance
+  WebServerInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for rhel-webserver
+      VpcId: 'vpc-0a291b0d61d8a0bce' # Known, previously built VPC
+      PrivateIpAddress: 10.0.0.137
+      SecurityGroupIngress:
+        # Allow SSH from Bastion private subnet
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/28
+        # Allow HTTP from Firewall subnet
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.0.0.0/28
+        # Allow HTTPS from Firewall subnet
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/28
+        # Allow traffic to port 9090 from Bastion private subnet (so bastion server can access Cockpit)
+        - IpProtocol: tcp
+          FromPort: 9090
+          ToPort: 9090
+          CidrIp: 10.0.0.0/28
+      Tags:
+        - Key: Name
+          Value: rhel-webserver-sg
+
+  # EC2 instance
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0583d8c7a9c35822c
+      KeyName: rhel9-playground-key-pair # Using the same key pair for demo, realistically would generate a key pair for each whitelisted connection
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeviceIndex: 0
+          SubnetId: 'subnet-094a9b9d467250e34' # Known, previously built private subnet in VPC (!Ref VpcId). NOTE: This subnet has a route table rule which redirects outbound 0.0.0.0/0 traffic to the NAT Gateway!
+          GroupSet:
+            - !Ref WebServerInstanceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: rhel-webserver
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # dnf install -y firewalld
+          dnf install -y cockpit
+          dnf install -y cockpit-pcp
+          dnf install -y httpd
+
+          # systemctl enable --now firewalld
+          systemctl enable --now cockpit.socket
+          systemctl enable --now pmlogger.service
+          systemctl enable --now httpd.service
+
+          # firewall-cmd --add-service=cockpit --permanent
+          # firewall-cmd --add-service=https --permanent
+          # firewall-cmd --add-service=http --permanent
+          # firewall-cmd --reload

@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template to create an EC2 instance named 'rhel-bastion'.
+
+Resources:
+  # Security Group for the EC2 instance
+  BastionInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for rhel-bastion
+      VpcId: 'vpc-0a291b0d61d8a0bce' # Known, previously built VPC
+      PrivateIpAddress: 10.0.0.10
+      SecurityGroupIngress:
+        # Allow SSH from World (realistically would whitelist a known ssh host subnet)
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        # Allow traffic to port 9090 from World (so bastion server can access Cockpit, again -- realistically would whitelist the known ssh host subnet)
+        - IpProtocol: tcp
+          FromPort: 9090
+          ToPort: 9090
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: rhel-bastion-sg
+
+  # EC2 instance
+  BastionInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0583d8c7a9c35822c
+      KeyName: rhel9-playground-key-pair # Using the same key pair for demo, realistically would generate a key pair for each whitelisted connection
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: 'subnet-017d1fdfaa7cdb2f0' # Known, previously built public subnet in VPC (!Ref VpcId)
+          GroupSet:
+            - !Ref BastionInstanceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: rhel-bastion
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y vim
+          dnf install -y cockpit
+          dnf install -y firewalld
+
+          systemctl enable --now firewalld
+          systemctl enable --now cockpit.socket
