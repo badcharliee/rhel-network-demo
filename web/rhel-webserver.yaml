@@ -34,7 +34,7 @@ Resources:
         - Key: Name
           Value: rhel-webserver-sg
 
-  # EC2 instance
+  # Webserver EC2 instance
   WebServerInstance:
     Type: AWS::EC2::Instance
     Properties:
@@ -53,21 +53,46 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          # dnf install -y firewalld
           dnf install -y cockpit
           dnf install -y cockpit-pcp
           dnf install -y httpd
           dnf install -y scap-security-guide lynx
 
-          # systemctl enable --now firewalld
           systemctl enable --now cockpit.socket
           systemctl enable --now pmlogger.service
           systemctl enable --now httpd.service
 
-          # firewall-cmd --add-service=cockpit --permanent
-          # firewall-cmd --add-service=https --permanent
-          # firewall-cmd --add-service=http --permanent
-          # firewall-cmd --reload
+          # Evaluate CIS Benchmarks Level 1 and Generate Report
+          oscap xccdf eval --profile xccdf_org.ssgproject.content_profile_cis_server_l1 --results ~/OpenScap_results_file.xml /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
+          oscap xccdf generate report --output ~/OpenScap_report_file.html ~/OpenScap_results_file.xml
+
+  # Backup Webserver EC2 instance
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0583d8c7a9c35822c
+      KeyName: rhel9-playground-key-pair # Using the same key pair for demo, realistically would generate a key pair for each whitelisted connection
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeviceIndex: 0
+          SubnetId: 'subnet-094a9b9d467250e34' # Known, previously built private subnet in VPC (!Ref VpcId). NOTE: This subnet has a route table rule which redirects outbound 0.0.0.0/0 traffic to the NAT Gateway!
+          GroupSet:
+            - !Ref WebServerInstanceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: rhel-webserver
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf install -y cockpit
+          dnf install -y cockpit-pcp
+          dnf install -y httpd
+          dnf install -y scap-security-guide lynx
+
+          systemctl enable --now cockpit.socket
+          systemctl enable --now pmlogger.service
+          systemctl enable --now httpd.service
 
           # Evaluate CIS Benchmarks Level 1 and Generate Report
           oscap xccdf eval --profile xccdf_org.ssgproject.content_profile_cis_server_l1 --results ~/OpenScap_results_file.xml /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
