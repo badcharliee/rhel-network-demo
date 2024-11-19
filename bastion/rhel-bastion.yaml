@@ -43,9 +43,11 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          dnf install -y vim
-          dnf install -y cockpit
-          dnf install -y firewalld
+          dnf install -y vim firewalld cockpit scap-security-guide lynx
 
           systemctl enable --now firewalld
           systemctl enable --now cockpit.socket
+
+          # Evaluate CIS Benchmarks Level 1 and Generate Report
+          oscap xccdf eval --profile xccdf_org.ssgproject.content_profile_cis_server_l1 --results ~/OpenScap_results_file.xml /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
+          oscap xccdf generate report --output ~/OpenScap_report_file.html ~/OpenScap_results_file.xml

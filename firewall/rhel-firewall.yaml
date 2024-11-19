@@ -56,6 +56,7 @@ Resources:
           dnf install -y vim
           dnf install -y cockpit
           dnf install -y firewalld
+          dnf install -y scap-security-guide lynx
 
           systemctl enable --now firewalld
           systemctl enable --now cockpit.socket
@@ -65,6 +66,10 @@ Resources:
           firewall-cmd --permanent --add-forward-port=port=80:proto=tcp:toaddr=<private-webserver-ip>:toport=80
           firewall-cmd --permanent --add-forward-port=port=443:proto=tcp:toaddr=<private-webserver-ip>:toport=443
           firewall-cmd --reload
+
+          # Evaluate CIS Benchmarks Level 1 and Generate Report
+          oscap xccdf eval --profile xccdf_org.ssgproject.content_profile_cis_server_l1 --results ~/OpenScap_results_file.xml /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
+          oscap xccdf generate report --output ~/OpenScap_report_file.html ~/OpenScap_results_file.xml
 
   # Elastic IP Association Resource
   EIPAssociation:
