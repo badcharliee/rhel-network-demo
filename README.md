@@ -1,1 +1,1 @@
-Rhel demo
+![Alt text](RHELNetworkDiagramFinal.png?raw=true "Network Diagram")
